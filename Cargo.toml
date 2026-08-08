@@ -2,7 +2,7 @@
 name = "eso-addons"
 version = "0.3.0"
 authors = ["Damian Czaja <trojan295@protonmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -16,15 +16,15 @@ path = "src/main.rs"
 toml = "0.9"
 serde = "1.0"
 serde_derive = "1.0"
-clap = { version = "4.6.5", features = ["derive", "cargo"] }
+clap = { version = "4.6", features = ["derive", "cargo"] }
 dirs = "6.0"
 regex = "1"
 reqwest = { version = "0.12", features = ["blocking"] }
 openssl = { version = "0.10", features = ["vendored"] }
-zip = "0.6"
-scraper = "0.23.1"
-tempfile = "3.1"
+zip = "0.7"
+scraper = "0.23"
+tempfile = "3.14"
 requestty = "0.6"
-colored = "3"
-prettytable-rs = "^0.10"
+colored = "2.2"
+prettytable-rs = "0.11"
 walkdir = "2"
