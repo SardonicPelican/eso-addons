@@ -18,7 +18,7 @@ jobs:
             runs_on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain "${{ matrix.target }}"
         uses: actions-rs/toolchain@v1
@@ -49,7 +49,7 @@ jobs:
           dest="${origin/${{ env.PROJECT_NAME}}/${{ env.PROJECT_NAME}}-${{ matrix.target}}}"
           mv "$origin" "$dest"
       - name: Upload Artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}
           path: ./target/${{ matrix.target }}/release/${{ env.PROJECT_NAME }}-${{ matrix.target }}*
@@ -60,12 +60,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
       - name: Create Release And Publish These Artifacts
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           name: Release ${{ env.PROJECT_NAME }} ${{ github.ref }}
           files: |
