@@ -9,6 +9,7 @@ mod clean;
 mod errors;
 mod list;
 mod remove;
+mod sync;
 mod update;
 
 use errors::{Error, Result};
@@ -38,6 +39,8 @@ enum SubCommand {
     Add(add::AddCommand),
     #[clap(about = "Uninstall addon")]
     Remove(remove::RemoveCommand),
+    #[clap(about = "Synchronize installed addons with the config")]
+    Sync(sync::SyncCommand),
 }
 
 pub fn run() -> Result<()> {
@@ -63,5 +66,6 @@ pub fn run() -> Result<()> {
             .map_err(|err| Error::Other(err)),
         SubCommand::Add(mut add) => add.run(&mut config, &config_filepath, &addon_manager),
         SubCommand::Remove(remove) => remove.run(&mut config, &config_filepath, &addon_manager),
+        SubCommand::Sync(sync) => sync.run(&mut config, &config_filepath, &addon_manager),
     }
 }

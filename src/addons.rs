@@ -205,7 +205,12 @@ impl Manager {
     }
 
     fn open_addon_metadata_file(&self, path: &Path, addon_name: &str) -> Result<File> {
-        for (extension, lowercase) in [("txt", false), ("txt", true), ("addon", false), ("addon", true)] {
+        for (extension, lowercase) in [
+            ("txt", false),
+            ("txt", true),
+            ("addon", false),
+            ("addon", true),
+        ] {
             let name = if lowercase {
                 addon_name.to_lowercase()
             } else {
@@ -224,10 +229,7 @@ impl Manager {
 }
 
 fn get_file_id(addon_url: &str) -> Option<String> {
-    let re = Regex::new(
-        r"^https://.*esoui\.com/downloads/(?:info|download)(\d+).*$",
-    )
-    .unwrap();
+    let re = Regex::new(r"^https://.*esoui\.com/downloads/(?:info|download)(\d+).*$").unwrap();
     if let Some(captures) = re.captures(addon_url) {
         return Some(captures[1].to_owned());
     }

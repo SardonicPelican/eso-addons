@@ -2,6 +2,7 @@ use clap::Parser;
 use eso_addons::{
     addons,
     addons::Manager,
+    cache::AddonCache,
     config::{self, AddonEntry, Config},
     htmlparser,
 };
@@ -32,6 +33,15 @@ impl AddCommand {
 
         if cfg.addons.iter().find(|el| el.url == entry.url).is_some() {
             println!("Addon {} is already installed", &entry.name);
+
+            // Still check for missing dependencies
+            if let Some(addon) = addon_manager
+                .get_addon(&entry.name)
+                .map_err(|e| Error::Other(Box::new(e)))?
+            {
+                self.install_dependencies(&addon.depends_on, cfg, config_filepath, addon_manager)?;
+            }
+
             return Ok(());
         }
 
@@ -46,6 +56,84 @@ impl AddCommand {
         config::save_config(config_filepath, &cfg)?;
 
         println!("🎊 Installed {}!", &entry.name);
+
+        // Install dependencies
+        self.install_dependencies(&installed.depends_on, cfg, config_filepath, addon_manager)?;
+
+        Ok(())
+    }
+
+    fn install_dependencies(
+        &self,
+        depends_on: &[String],
+        cfg: &mut Config,
+        config_filepath: &Path,
+        addon_manager: &Manager,
+    ) -> Result<()> {
+        for dep_name in depends_on {
+            // Skip if already in config
+            if cfg.addons.iter().any(|el| el.name == *dep_name) {
+                continue;
+            }
+
+            println!("📦 Installing dependency: {}", dep_name);
+
+            let cache = AddonCache::new();
+            let dep_url = match cache.find_addon(dep_name)? {
+                Some(url) => url,
+                None => {
+                    eprintln!(
+                        "⚠️  Could not find dependency '{}' in addon cache, skipping",
+                        dep_name
+                    );
+                    continue;
+                }
+            };
+
+            let download_url = match addons::get_download_url(&dep_url) {
+                Some(url) => url,
+                None => {
+                    eprintln!(
+                        "⚠️  Could not resolve download URL for '{}', skipping",
+                        dep_name
+                    );
+                    continue;
+                }
+            };
+
+            let dep_installed = match addon_manager.download_addon(&download_url) {
+                Ok(addon) => addon,
+                Err(e) => {
+                    eprintln!(
+                        "⚠️  Failed to download dependency '{}': {}, skipping",
+                        dep_name, e
+                    );
+                    // The cached URL is no longer valid, drop it so the next
+                    // lookup falls back to searching esoui.com again.
+                    let _ = cache.invalidate(dep_name);
+                    continue;
+                }
+            };
+
+            let dep_entry = AddonEntry {
+                name: dep_installed.name.clone(),
+                url: Some(download_url),
+                dependency: true,
+            };
+
+            cfg.addons.push(dep_entry);
+            config::save_config(config_filepath, &cfg)?;
+
+            println!("🎊 Installed dependency {}!", &dep_installed.name);
+
+            // Recurse for transitive dependencies
+            self.install_dependencies(
+                &dep_installed.depends_on,
+                cfg,
+                config_filepath,
+                addon_manager,
+            )?;
+        }
 
         Ok(())
     }

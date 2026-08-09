@@ -11,6 +11,15 @@ pub fn get_addon_name(doc: Html) -> Option<String> {
         .map(|node| node.value().attr("content").unwrap().to_owned())
 }
 
+pub fn get_canonical_url(doc: &Html) -> Option<String> {
+    let selector = Selector::parse("meta").unwrap();
+    let a = doc.select(&selector);
+
+    a.into_iter()
+        .find(|node| node.value().attr("property").unwrap_or("") == "og:url")
+        .map(|node| node.value().attr("content").unwrap().to_owned())
+}
+
 pub fn get_cdn_download_link(doc: Html) -> Option<String> {
     let selector = Selector::parse("a, iframe").unwrap();
     let mut a = doc.select(&selector);

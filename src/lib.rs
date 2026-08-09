@@ -16,6 +16,7 @@ extern crate walkdir;
 extern crate zip;
 
 pub mod addons;
+pub mod cache;
 pub mod config;
 pub mod errors;
 pub mod htmlparser;
