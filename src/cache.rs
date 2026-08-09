@@ -127,6 +127,7 @@ impl AddonCache {
         let body = response.text().map_err(|err| Error::Other(Box::new(err)))?;
         let document = Html::parse_document(&body);
         let selector = Selector::parse("a[href]").unwrap();
+        let mut candidates = Vec::new();
 
         for link in document.select(&selector) {
             let href = link.value().attr("href").unwrap_or("");
@@ -141,10 +142,27 @@ impl AddonCache {
             } else {
                 format!("https://www.esoui.com/downloads/{}", href)
             };
-            return Ok(Some(absolute_url));
+            candidates.push((link.text().collect::<String>(), absolute_url));
         }
 
-        Ok(None)
+        eprintln!(
+            "esoui search for '{}' returned {} addon result(s)",
+            name,
+            candidates.len()
+        );
+        for (title, url) in &candidates {
+            eprintln!("  - {:?}: {}", title.trim(), url);
+        }
+
+        let wanted = name.to_lowercase();
+        Ok(candidates
+            .iter()
+            .find(|(title, url)| {
+                title.trim().to_lowercase() == wanted
+                    || url.to_lowercase().contains(&format!("-{}", wanted))
+            })
+            .or_else(|| candidates.first())
+            .map(|(_, url)| url.clone()))
     }
 }
 

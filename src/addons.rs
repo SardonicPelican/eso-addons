@@ -6,7 +6,6 @@ use std::fs::{self, File};
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 use tempfile::tempfile;
-use walkdir::WalkDir;
 
 #[derive(Debug)]
 pub struct Addon {
@@ -48,32 +47,23 @@ impl Manager {
             ));
         }
 
-        for entry in WalkDir::new(&self.addon_dir) {
-            let entry_dir = entry.map_err(|err| {
+        // Addons are represented by the immediate subdirectories of AddOns.
+        // Do not recurse: some addons (for example HarvestMap) contain nested
+        // addon directories that must not be treated as separate addons.
+        let entries = fs::read_dir(&self.addon_dir).map_err(|err| {
+            Error::CannotOpenAddonDirectory(self.addon_dir.clone(), Box::new(err))
+        })?;
+
+        for entry in entries {
+            let entry = entry.map_err(|err| {
                 Error::CannotOpenAddonDirectory(self.addon_dir.clone(), Box::new(err))
             })?;
-            let file_path = entry_dir.path();
-
-            let file_name = entry_dir.file_name();
-            let parent_dir_name = file_path.parent().map(|f| f.file_name()).flatten();
-
-            match parent_dir_name {
-                None => continue,
-                Some(parent_dir_name) => {
-                    let matches = [".txt", ".addon"].iter().any(|ext| {
-                        let mut name = parent_dir_name.to_os_string();
-                        name.push(ext);
-                        name == file_name
-                    });
-                    if !matches {
-                        continue;
-                    }
-                }
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
             }
 
-            let addon_dir = file_path.parent().unwrap();
-
-            match self.read_addon(addon_dir) {
+            match self.read_addon(&path) {
                 Ok(addon) => addon_list.addons.push(addon),
                 Err(err) => addon_list.errors.push(err),
             }
@@ -250,7 +240,8 @@ pub fn get_download_url(addon_url: &str) -> Option<String> {
         },
         |url: &str| {
             let re =
-                Regex::new(r"^https://.+esoui\.com/downloads/fileinfo\.php\?id=(\d+)$").unwrap();
+                Regex::new(r"^https://.+esoui\.com/downloads/fileinfo\.php\?id=(\d+)(?:&.*)?$")
+                    .unwrap();
             re.captures(url).map(|captures| captures[1].to_owned())
         },
     ];

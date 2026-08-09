@@ -12,7 +12,6 @@ extern crate serde;
 extern crate serde_derive;
 extern crate tempfile;
 extern crate toml;
-extern crate walkdir;
 extern crate zip;
 
 pub mod addons;
