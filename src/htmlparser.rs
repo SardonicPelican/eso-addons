@@ -12,17 +12,25 @@ pub fn get_addon_name(doc: Html) -> Option<String> {
 }
 
 pub fn get_cdn_download_link(doc: Html) -> Option<String> {
-    let selector = Selector::parse("a").unwrap();
+    let selector = Selector::parse("a, iframe").unwrap();
     let mut a = doc.select(&selector);
 
     let link_node = a.find(|node| {
-        node.value()
-            .attr("href")
-            .unwrap_or("")
-            .starts_with("https://cdn.esoui.com")
+        ["href", "src"].iter().any(|attr| {
+            node.value()
+                .attr(attr)
+                .unwrap_or("")
+                .starts_with("https://cdn.esoui.com")
+        })
     });
 
-    link_node.map(|node| node.value().attr("href").unwrap().to_owned())
+    link_node.map(|node| {
+        node.value()
+            .attr("href")
+            .or_else(|| node.value().attr("src"))
+            .unwrap()
+            .to_owned()
+    })
 }
 
 pub fn get_document(url: &str) -> Result<Html> {
