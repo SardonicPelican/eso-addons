@@ -6,7 +6,6 @@ use std::fs::{self, File};
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 use tempfile::tempfile;
-use walkdir::WalkDir;
 
 #[derive(Debug)]
 pub struct Addon {
@@ -48,29 +47,23 @@ impl Manager {
             ));
         }
 
-        for entry in WalkDir::new(&self.addon_dir) {
-            let entry_dir = entry.map_err(|err| {
+        // Addons are represented by the immediate subdirectories of AddOns.
+        // Do not recurse: some addons (for example HarvestMap) contain nested
+        // addon directories that must not be treated as separate addons.
+        let entries = fs::read_dir(&self.addon_dir).map_err(|err| {
+            Error::CannotOpenAddonDirectory(self.addon_dir.clone(), Box::new(err))
+        })?;
+
+        for entry in entries {
+            let entry = entry.map_err(|err| {
                 Error::CannotOpenAddonDirectory(self.addon_dir.clone(), Box::new(err))
             })?;
-            let file_path = entry_dir.path();
-
-            let file_name = entry_dir.file_name();
-            let parent_dir_name = file_path.parent().map(|f| f.file_name()).flatten();
-
-            match parent_dir_name {
-                None => continue,
-                Some(parent_dir_name) => {
-                    let mut name = parent_dir_name.to_os_string();
-                    name.push(".txt");
-                    if name != file_name {
-                        continue;
-                    }
-                }
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
             }
 
-            let addon_dir = file_path.parent().unwrap();
-
-            match self.read_addon(addon_dir) {
+            match self.read_addon(&path) {
                 Ok(addon) => addon_list.addons.push(addon),
                 Err(err) => addon_list.errors.push(err),
             }
@@ -133,7 +126,15 @@ impl Manager {
     }
 
     pub fn download_addon(&self, url: &str) -> Result<Addon> {
-        let download_link = htmlparser::get_document(url).map(htmlparser::get_cdn_download_link)?;
+        // esoui.com no longer serves archives directly from "download<ID>" URLs;
+        // the CDN link is on the landing page for the file id.
+        let page_url = match get_file_id(url) {
+            Some(id) => format!("https://www.esoui.com/downloads/landing.php?fileid={}", id),
+            None => url.to_owned(),
+        };
+
+        let download_link =
+            htmlparser::get_document(&page_url).map(htmlparser::get_cdn_download_link)?;
         let download_link = download_link.ok_or(Error::CannotDownloadAddon(
             url.to_owned(),
             "CDN link missing".into(),
@@ -194,23 +195,41 @@ impl Manager {
     }
 
     fn open_addon_metadata_file(&self, path: &Path, addon_name: &str) -> Result<File> {
-        let mut filepath = path.to_owned();
-        let mut filepath_lowercase = path.to_owned();
+        for (extension, lowercase) in [
+            ("txt", false),
+            ("txt", true),
+            ("addon", false),
+            ("addon", true),
+        ] {
+            let name = if lowercase {
+                addon_name.to_lowercase()
+            } else {
+                addon_name.to_owned()
+            };
+            let mut filepath = path.to_owned();
+            filepath.push(PathBuf::from(format!("{}.{}", name, extension)));
 
-        let filename = PathBuf::from(format!("{}.txt", addon_name));
-        let filename_lowercase = PathBuf::from(format!("{}.txt", addon_name.to_lowercase()));
-
-        filepath.push(filename);
-        filepath_lowercase.push(filename_lowercase);
-
-        if filepath.exists() {
-            File::open(&filepath).map_err(|err| Error::Other(Box::new(err)))
-        } else if filepath_lowercase.exists() {
-            File::open(&filepath_lowercase).map_err(|err| Error::Other(Box::new(err)))
-        } else {
-            Err(Error::Other("missing addon metadata file".into()))
+            if filepath.exists() {
+                return File::open(&filepath).map_err(|err| Error::Other(Box::new(err)));
+            }
         }
+
+        Err(Error::Other("missing addon metadata file".into()))
     }
+}
+
+fn get_file_id(addon_url: &str) -> Option<String> {
+    let re = Regex::new(r"^https://.*esoui\.com/downloads/(?:info|download)(\d+).*$").unwrap();
+    if let Some(captures) = re.captures(addon_url) {
+        return Some(captures[1].to_owned());
+    }
+
+    let re = Regex::new(
+        r"^https://.+esoui\.com/downloads/(?:fileinfo|landing)\.php\?(?:.*&)?(?:id|fileid)=(\d+).*$",
+    )
+    .unwrap();
+    re.captures(addon_url)
+        .map(|captures| captures[1].to_owned())
 }
 
 pub fn get_download_url(addon_url: &str) -> Option<String> {
@@ -221,7 +240,8 @@ pub fn get_download_url(addon_url: &str) -> Option<String> {
         },
         |url: &str| {
             let re =
-                Regex::new(r"^https://.+esoui\.com/downloads/fileinfo\.php\?id=(\d+)$").unwrap();
+                Regex::new(r"^https://.+esoui\.com/downloads/fileinfo\.php\?id=(\d+)(?:&.*)?$")
+                    .unwrap();
             re.captures(url).map(|captures| captures[1].to_owned())
         },
     ];
@@ -249,6 +269,24 @@ fn get_root_dir(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_addon_metadata_file() {
+        let addon_dir = tempfile::tempdir().unwrap();
+        let addon_path = addon_dir.path().join("DolgubonsLazyWritCreator");
+        fs::create_dir(&addon_path).unwrap();
+        fs::write(
+            addon_path.join("DolgubonsLazyWritCreator.addon"),
+            include_str!("../tests/fixtures/DolgubonsLazyWritCreator.addon"),
+        )
+        .unwrap();
+
+        let manager = Manager::new(addon_dir.path());
+        let addon = manager.read_addon(&addon_path).unwrap();
+
+        assert_eq!(addon.name, "DolgubonsLazyWritCreator");
+        assert_eq!(addon.depends_on, vec!["LibLazyCrafting"]);
+    }
 
     #[test]
     fn test_get_download_link() {

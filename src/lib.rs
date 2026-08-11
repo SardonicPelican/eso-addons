@@ -12,10 +12,10 @@ extern crate serde;
 extern crate serde_derive;
 extern crate tempfile;
 extern crate toml;
-extern crate walkdir;
 extern crate zip;
 
 pub mod addons;
+pub mod cache;
 pub mod config;
 pub mod errors;
 pub mod htmlparser;
